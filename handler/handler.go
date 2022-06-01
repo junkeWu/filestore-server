@@ -37,7 +37,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		// store by fileMeta
 		fileMeta := meta.FileMeta{
 			FileName: head.Filename,
-			Location: "/temp/" + head.Filename,
+			Location: "./temp/" + head.Filename,
 			UploadAt: time.Now().Format("2006.01.02 15:04:15"),
 		}
 
@@ -79,5 +79,32 @@ func GetFileMeta(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.Write(data)
+}
+
+func DownloadFile(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseForm()
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	// find file meta
+	filehash := r.Form.Get("filehash")
+	fm := meta.GetFileMeta(filehash)
+	fmt.Println("====data", fm.Location)
+	// download file by path
+	f, err := os.Open(fm.Location)
+	if err != nil {
+		util.StatusInternalServer(w)
+	}
+	defer f.Close()
+	// todo use stream read file
+	data, err := ioutil.ReadAll(f)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment;filename=\""+fm.FileName+"\"")
 	w.Write(data)
 }
