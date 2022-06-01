@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"hash"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 )
@@ -67,4 +68,9 @@ func GetFileSize(filename string) int64 {
 		return nil
 	})
 	return result
+}
+
+func StatusInternalServer(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusInternalServerError)
+	return
 }
