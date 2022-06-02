@@ -70,7 +70,10 @@ func GetFileSize(filename string) int64 {
 	return result
 }
 
-func StatusInternalServer(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusInternalServerError)
+func StatusInternalServer(w http.ResponseWriter, err error) {
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		panic(err)
+	}
 	return
 }

@@ -30,3 +30,14 @@ func UploadFileMeta(fmeta FileMeta) {
 func GetFileMeta(fsha1 string) FileMeta {
 	return fileMetas[fsha1]
 }
+
+func GetFileMetaList() (fms []FileMeta) {
+	for _, meta := range fileMetas {
+		fms = append(fms, meta)
+	}
+	return fms
+}
+
+func RemoveFileMeta(fileHash string) {
+	delete(fileMetas, fileHash)
+}

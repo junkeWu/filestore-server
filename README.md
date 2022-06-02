@@ -6,3 +6,5 @@
 第二版：完成基本的文件查看功能 接口： get /file/meta?filehash="xxx"
 
 第三版： 完成基本文件下载功能 接口： get /file/download?filehash="xxxx"
+
+第四版：完成基本所有的增删查改 

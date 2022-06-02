@@ -82,6 +82,14 @@ func GetFileMeta(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
+func GetFileMetaList(w http.ResponseWriter, r *http.Request) {
+	list := meta.GetFileMetaList()
+	data, err := json.Marshal(&list)
+	util.StatusInternalServer(w, err)
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
+}
+
 func DownloadFile(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
@@ -91,20 +99,54 @@ func DownloadFile(w http.ResponseWriter, r *http.Request) {
 	// find file meta
 	filehash := r.Form.Get("filehash")
 	fm := meta.GetFileMeta(filehash)
-	fmt.Println("====data", fm.Location)
 	// download file by path
 	f, err := os.Open(fm.Location)
-	if err != nil {
-		util.StatusInternalServer(w)
-	}
+	util.StatusInternalServer(w, err)
+
 	defer f.Close()
-	// todo use stream read file
+	// todo use buffer read file
 	data, err := ioutil.ReadAll(f)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	// w.WriteHeader(http.StatusInternalServerError)
+	// log.Println(err)
+	util.StatusInternalServer(w, err)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", "attachment;filename=\""+fm.FileName+"\"")
 	w.Write(data)
+}
+
+// UpdateFileMeta update file meta
+func UpdateFileMeta(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	operator := r.Form.Get("op")
+	filename := r.Form.Get("filename")
+	fileHash := r.Form.Get("filehash")
+
+	if operator != "0" {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	fileMeta := meta.GetFileMeta(fileHash)
+	fileMeta.FileName = filename
+	meta.UploadFileMeta(fileMeta)
+
+	data, err := json.Marshal(fileMeta)
+	util.StatusInternalServer(w, err)
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
+}
+
+// DeleteFileMeta delete file meta
+// todo 保持线程安全
+func DeleteFileMeta(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	fileHash := r.Form.Get("filehash")
+	fileMeta := meta.GetFileMeta(fileHash)
+	os.Remove(fileMeta.Location)
+	meta.RemoveFileMeta(fileHash)
+	w.WriteHeader(http.StatusOK)
+	http.Redirect(w, r, "/file/getList", http.StatusFound)
 }
