@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/junkeWu/filestore-server/meta"
@@ -16,7 +18,6 @@ import (
 
 // UploadHandler 文件上传接口
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("come in")
 	if r.Method == "GET" {
 		// 返回上传html页面
 		data, err := ioutil.ReadFile("./static/view/index.html")
@@ -55,11 +56,13 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Printf("Failer to save data into file, err: %s\n", err.Error())
 			return
 		}
+		// 实际写盘操作
 		wt.Flush()
 		// compute file sha1
 		newFile.Seek(0, 0)
 		fileMeta.FileSha1 = util.FileSha1(newFile)
-		meta.UploadFileMeta(fileMeta)
+		// meta.UploadFileMeta(fileMeta)
+		_ = meta.UpdateFileMetaDB(fileMeta)
 		http.Redirect(w, r, "/file/upload/suc", http.StatusFound)
 	}
 }
@@ -72,8 +75,14 @@ func UploadSucHandler(w http.ResponseWriter, r *http.Request) {
 // GetFileMeta get file meta
 func GetFileMeta(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	filehash := r.Form["filehash"][0]
-	fmeta := meta.GetFileMeta(filehash)
+	fileHash := r.Form["fileHash"][0]
+	// fmeta := meta.GetFileMeta(fileHash)
+	fmeta, err := meta.GetFileMetaDB(fileHash)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Println(err)
+		return
+	}
 	data, err := json.Marshal(fmeta)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -83,7 +92,8 @@ func GetFileMeta(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetFileMetaList(w http.ResponseWriter, r *http.Request) {
-	list := meta.GetFileMetaList()
+	// list := meta.GetFileMetaList()
+	list, err := meta.GetFileMetaListDB()
 	data, err := json.Marshal(&list)
 	util.StatusInternalServer(w, err)
 	w.WriteHeader(http.StatusOK)
@@ -97,8 +107,14 @@ func DownloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// find file meta
-	filehash := r.Form.Get("filehash")
-	fm := meta.GetFileMeta(filehash)
+	fileHash := r.Form.Get("fileHash")
+	// fm := meta.GetFileMeta(fileHash)
+	fm, err := meta.GetFileMetaDB(fileHash)
+	if err != nil {
+		w.WriteHeader(http.StatusOK)
+		log.Fatalln(err)
+		return
+	}
 	// download file by path
 	f, err := os.Open(fm.Location)
 	util.StatusInternalServer(w, err)
@@ -123,7 +139,7 @@ func UpdateFileMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	operator := r.Form.Get("op")
 	filename := r.Form.Get("filename")
-	fileHash := r.Form.Get("filehash")
+	fileHash := r.Form.Get("fileHash")
 
 	if operator != "0" {
 		w.WriteHeader(http.StatusForbidden)
@@ -143,8 +159,22 @@ func UpdateFileMeta(w http.ResponseWriter, r *http.Request) {
 // todo 保持线程安全
 func DeleteFileMeta(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	fileHash := r.Form.Get("filehash")
-	fileMeta := meta.GetFileMeta(fileHash)
+	fileHash := r.Form.Get("fileHash")
+	fileMeta, err := meta.GetFileMetaDB(fileHash)
+	if err != nil {
+		log.Fatalln(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	var mutex sync.Mutex
+	mutex.Lock()
+	_, err = meta.RemoveFileMetaDB(fileHash)
+	mutex.Unlock()
+	if err != nil {
+		log.Fatalln(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	os.Remove(fileMeta.Location)
 	meta.RemoveFileMeta(fileHash)
 	w.WriteHeader(http.StatusOK)
