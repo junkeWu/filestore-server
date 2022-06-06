@@ -77,3 +77,9 @@ func StatusInternalServer(w http.ResponseWriter, err error) {
 	}
 	return
 }
+
+func Must(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
