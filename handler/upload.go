@@ -13,8 +13,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/junkeWu/filestore-server/common"
+	cfg "github.com/junkeWu/filestore-server/config"
 	mdb "github.com/junkeWu/filestore-server/db"
 	"github.com/junkeWu/filestore-server/meta"
+	"github.com/junkeWu/filestore-server/mq"
+	"github.com/junkeWu/filestore-server/store/oss"
 	util "github.com/junkeWu/filestore-server/utils"
 )
 
@@ -63,6 +67,35 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		// compute file sha1
 		newFile.Seek(0, 0)
 		fileMeta.FileSha1 = util.FileSha1(newFile)
+		newFile.Seek(0, 0)
+		// oss
+		ossPath := "oss/" + fileMeta.Location
+		if !cfg.AsyncTransferEnable {
+			err = oss.Bucket().PutObject(ossPath, newFile)
+			util.Must(err)
+			// 已经在oss上
+			fileMeta.Location = ossPath
+		} else {
+			data := mq.TransferData{
+				FileHash:     fileMeta.FileSha1,
+				CurLocation:  fileMeta.Location,
+				DestLocation: ossPath,
+				DesStoreType: common.StoreOSS,
+			}
+			fmt.Println("已经写入mq队列：", data)
+			pubData, _ := json.Marshal(data)
+			pubSuc := mq.Publish(
+				cfg.TransExchangeName,
+				cfg.TransOSSRoutingKey,
+				pubData,
+			)
+			if !pubSuc {
+				// TODO: 当前发送转移信息失败，稍后重试
+				fmt.Println("发布失败")
+			}
+		}
+		util.Must(err)
+
 		// meta.UploadFileMeta(fileMeta)
 		_ = meta.UpdateFileMetaDB(fileMeta)
 		// todo update into user_file table
@@ -124,7 +157,7 @@ func DownloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// find file meta
-	fileHash := r.Form.Get("fileHash")
+	fileHash := r.Form.Get("filehash")
 	// fm := meta.GetFileMeta(fileHash)
 	fm, err := meta.GetFileMetaDB(fileHash)
 	if err != nil {
@@ -248,4 +281,15 @@ func TryFastUploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write(resp.JSONBytes())
 	}
+}
+
+func DownloadURLHandler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	fileHash := r.Form.Get("filehash")
+
+	// 从文件表查找记录
+	row, err := mdb.GetFileMeta(fileHash)
+	util.Must(err)
+	url := oss.DownloadURL(row.FileAddr.String)
+	w.Write([]byte(url))
 }

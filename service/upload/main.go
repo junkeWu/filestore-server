@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	cfg "github.com/junkeWu/filestore-server/config"
 	"github.com/junkeWu/filestore-server/handler"
 )
 
@@ -19,6 +20,7 @@ func main() {
 	http.HandleFunc("/file/meta", handler.GetFileMeta)
 	http.HandleFunc("/file/query", handler.GetFileMetaList)
 	http.HandleFunc("/file/download", handler.DownloadFile)
+	http.HandleFunc("/file/downloadurl", handler.HTTPInterceptor(handler.DownloadURLHandler))
 	http.HandleFunc("/file/update", handler.UpdateFileMeta)
 	http.HandleFunc("/file/delete", handler.DeleteFileMeta)
 	http.HandleFunc("/file/fastupload", handler.HTTPInterceptor(handler.TryFastUploadHandler))
@@ -35,6 +37,7 @@ func main() {
 		handler.HTTPInterceptor(handler.UploadPartHandler))
 	http.HandleFunc("/file/mpupload/complete",
 		handler.HTTPInterceptor(handler.CompleteUploadHandler))
+	fmt.Printf("上传服务启动中，开始监听监听[%s]...\n", cfg.UploadServiceHost)
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		fmt.Printf("Failed to start server, err: %s", err.Error())
